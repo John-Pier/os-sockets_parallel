@@ -17,8 +17,10 @@ char message_data[]={"Hello world"};
 int client_socket;
 struct sockaddr_in address;
 
-void *client_runnable() {
-    printf("\nClient started\n");
+void *client_runnable(const int *arg) {
+    int sum = *(arg), value = *(arg + 1);
+
+    printf("\nClient started\n %d %d", value, sum);
 
     client_socket = socket(AF_INET, SOCK_DGRAM, 0);
 
@@ -53,13 +55,23 @@ void server_runnable() {
     printf("\nTotal %d bytes received\n", total);
 }
 
-int main() {
+int main(int argc, char *argv[]) {
     printf("LAB 2:\nPopov N. 6133\n");
+    printf("Enter 3 numbers (with enter key)");
+    int a, b, c, sum;
+    printf("Enter 1 number");
+    scanf("%d", &a);
+    printf("Enter 2 number");
+    scanf("%d", &b);
+    printf("Enter 3 number");
+    scanf("%d", &c);
+    printf("%d %d %d", a, b, c);
+    sum = a + b + c;
+
     pthread_t thread1, thread2, thread3;
-    int result = pthread_create(&thread1, NULL, client_runnable, NULL);
-    pthread_create(&thread2, NULL, client_runnable, NULL);
-    pthread_create(&thread3, NULL, client_runnable, NULL);
-    printf("\n%d\n", result);
+    pthread_create(&thread1, NULL, (void *(*)(void *)) client_runnable, (int[2]){a, sum});
+    pthread_create(&thread2, NULL, (void *(*)(void *)) client_runnable, (int[2]){b, sum});
+    pthread_create(&thread3, NULL, (void *(*)(void *)) client_runnable, (int[2]){c, sum});
     server_runnable();
     return 0;
 }
