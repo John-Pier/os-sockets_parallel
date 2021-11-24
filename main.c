@@ -22,58 +22,48 @@ long send_all(int s, char *buf, int len, int flags) {
     return (n == -1 ? -1 : total);
 }
 
-char*  to_str(double value) {
+char *to_str(double value) {
     int length = snprintf(NULL, 0, "%f", value);
-    char* result = malloc(length + 1);
+    char *result = malloc(length + 1);
     snprintf(result, length + 1, "%f", value);
     return result;
 }
 
-int send_double(double num, int fd){
+int send_double(double num, int fd) {
     double conv = htole64(num);
-    char *data = (char*)&conv;
-    int left = sizeof(conv);
-    int rc;
+    char *data = (char *) &conv;
+    long left = sizeof(conv);
+    long rc;
     do {
-        rc = send(fd, data, left,0);
+        rc = send(fd, data, left, 0);
         if (rc < 0) {
-            if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) {
-                // use select() or epoll() to wait for the socket to be writable again
-            }
-            else if (errno != EINTR) {
+            if (errno != EINTR) {
                 return -1;
             }
-        }
-        else {
+        } else {
             data += rc;
             left -= rc;
         }
-    }
-    while (left > 0);
+    } while (left > 0);
     return 0;
 }
 
-int receive_double(double *num, int fd){
+int receive_double(double *num, int fd) {
     double ret;
-    char *data = (char*)&ret;
-    int left = sizeof(ret);
-    int rc;
+    char *data = (char *) &ret;
+    long left = sizeof(ret);
+    long rc;
     do {
-        rc = recv(fd, data, left,0);
-        if (rc <= 0) { /* instead of ret */
-            if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) {
-                // use select() or epoll() to wait for the socket to be readable again
-            }
-            else if (errno != EINTR) {
+        rc = recv(fd, data, left, 0);
+        if (rc <= 0) {
+            if (errno != EINTR) {
                 return -1;
             }
-        }
-        else {
+        } else {
             data += rc;
             left -= rc;
         }
-    }
-    while (left > 0);
+    } while (left > 0);
     *num = htole64(ret);
     return 0;
 }
@@ -101,8 +91,7 @@ void *client_runnable(const double *arg) {
         perror("client_socket:connect");
         exit(2);
     }
-    char* buf = to_str(result);
-    //send(client_socket, buf, strlen(buf), 0);
+
     send_double(result, client_socket);
     close(client_socket);
     pthread_exit(NULL);
@@ -162,7 +151,7 @@ int main(int argc, char *argv[]) {
     double sum = (a + b + c) / 3;
     printf("\nSum of numbers / 3: %f", sum);
 
-    pthread_t thread1, thread2, thread3,  server_thread;
+    pthread_t thread1, thread2, thread3, server_thread;
     int thread1_status, thread2_status, thread3_status;
 
     pthread_create(&server_thread, NULL, server_runnable, NULL);
