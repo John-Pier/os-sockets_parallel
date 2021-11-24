@@ -1,77 +1,155 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <sys/un.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <pthread.h>
-
+#include <malloc.h>
+#include <stdlib.h>
 
 #define PORT 6969
-#define BUFFER_SIZE 16
 
-int server_socket;
-struct sockaddr_in address;
-char buf[BUFFER_SIZE];
-int bytes_read, total = 0;
-char message_data[]={"Hello world"};
-int client_socket;
-struct sockaddr_in address;
+long send_all(int s, char *buf, int len, int flags){
+    long total = 0;
+    long n;
+    while(total < len)
+    {
+        n = send(s, buf+total, len-total, flags);
+        if(n == -1) { break; }
+        total += n;
+    }
+    return (n==-1 ? -1 : total);
+}
 
-void *client_runnable(const int *arg) {
-    int sum = *(arg), value = *(arg + 1);
+long recive_all(int s, char *buf, int len, int flags){
+    long total = 0;
+    long n;
+    while(total < len)
+    {
+        n = recv(s, buf+total, len-total, flags);
+        if(n == -1) { break; }
+        total += n;
+    }
+    return (n==-1 ? -1 : total);
+}
 
-    printf("\nClient started\n %d %d", value, sum);
+void init_address(struct sockaddr_un *addr, const char *path, int I) {
+    struct sockaddr_un tmp = { .sun_family = AF_UNIX };
+    // fill sun_path
+    memset(tmp.sun_path, I, 108);
+    // copy path
+    snprintf(tmp.sun_path, 108, "%s", path);
+    *addr = tmp;
+}
 
-    client_socket = socket(AF_INET, SOCK_DGRAM, 0);
+void *client_runnable(const double *arg) {
+    int client_socket;
+    struct sockaddr_in address;
+    //init_address(&address, "/tmp/test", 'x');
+    //address.sun_family = AF_UNIX;
+
+    double sum = *(arg), value = *(arg + 1);
+    double part = sum - value;
+    double result = (part * part)/2;
+    printf("\nClient result = %f\n", result);
+
+    client_socket = socket(AF_INET, SOCK_STREAM, 0); // todo: use AF_UNIX
+    if(client_socket < 0){
+        perror("client_socket:socket");
+        exit(1);
+    }
 
     address.sin_family = AF_INET;
     address.sin_port = htons(PORT);
     address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 
-    connect(client_socket, (struct sockaddr *) &address, sizeof(address));
-    send(client_socket, message_data, strlen(message_data), 0);
+    if(connect(client_socket, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        printf("\n Error : Connect Failed \n");
+        perror("client_socket:connect");
+        exit(2);
+    }
+
+    long sendet = send(client_socket, (char *)&result, sizeof(result), 0);
+    printf("\n%ld\n", sendet);
     close(client_socket);
     pthread_exit(NULL);
 }
 
 void server_runnable() {
     printf("\nServer started\n");
-    server_socket = socket(AF_INET, SOCK_DGRAM, 0);
+
+    long bytes_read, current = 0;
+    int8_t BUFFER_SIZE = sizeof(double);
+    double part_of_result;
+    double* results_buffer = malloc(sizeof(double) * 3);
+
+    int server_socket;
+    struct sockaddr_in address;
+    //init_address(&address, "/tmp/test", 'x');
+    //address.sun_family = AF_UNIX;
+    //address.sun_path = '\0';
+
+    server_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if(server_socket < 0){
+        perror("server_socket:socket");
+        exit(1);
+    }
+
     address.sin_family = AF_INET;
     address.sin_port = htons(PORT);
     address.sin_addr.s_addr = htonl(INADDR_ANY);
-    int bind_result = bind(server_socket, (struct sockaddr *)&address, sizeof(address));
-    printf("bind_result: %d", bind_result);
-    while(1) {
-        bytes_read = recvfrom(server_socket, buf, BUFFER_SIZE, 0, NULL, NULL);
-        total = total + bytes_read;
-        buf[bytes_read] = '\0';
-        fprintf(stdout, "%s", buf);
-        fflush(stdout);
-        if (total > BUFFER_SIZE) {
-            break;
-        };
+
+    if(bind(server_socket, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        perror("server_socket:bind");
+        exit(2);
     }
-    printf("\nTotal %d bytes received\n", total);
+
+    listen(server_socket, 3);
+
+    int i = -1;
+    while ((i++) < 3) {
+        //int total = 0;
+        int connectId = accept(server_socket, (struct sockaddr *) NULL, NULL);
+        if(connectId < 0){
+            perror("accept");
+            exit(3);
+        }
+        char *buf = malloc(sizeof(double)+1);
+        while(1){
+            bytes_read = recv(connectId, buf, sizeof(double), 0);
+            if(bytes_read <= 0) break;
+            //send(connectId, buf, bytes_read, 0);
+        }
+        printf("%s", buf);
+
+        close(connectId);
+    }
 }
 
 int main(int argc, char *argv[]) {
     printf("LAB 2:\nPopov N. 6133\n");
-    printf("Enter 3 numbers (with enter key)");
-    int a, b, c, sum;
-    printf("Enter 1 number");
-    scanf("%d", &a);
-    printf("Enter 2 number");
-    scanf("%d", &b);
-    printf("Enter 3 number");
-    scanf("%d", &c);
-    printf("%d %d %d", a, b, c);
-    sum = a + b + c;
+    printf("Enter 3 numbers (with enter key)\n");
+    double a, b, c;
+    printf("Enter 1 number: ");
+    scanf("%lf", &a);
+    printf("Enter 2 number: ");
+    scanf("%lf", &b);
+    printf("Enter 3 number: ");
+    scanf("%lf", &c);
+//    printf("%f %f %f", a, b, c);
+    double sum = (a + b + c)/3;
+    //printf("\n%f", sum);
 
-    pthread_t thread1, thread2, thread3;
-    pthread_create(&thread1, NULL, (void *(*)(void *)) client_runnable, (int[2]){a, sum});
-    pthread_create(&thread2, NULL, (void *(*)(void *)) client_runnable, (int[2]){b, sum});
-    pthread_create(&thread3, NULL, (void *(*)(void *)) client_runnable, (int[2]){c, sum});
     server_runnable();
+    pthread_t thread1, thread2, thread3;
+    int thread1_status, thread2_status, thread3_status;
+    pthread_create(&thread1, NULL, client_runnable, (double[2]){a, sum});
+
+    //pthread_create(&thread2, NULL, client_runnable, (double[2]){b, sum});
+    //pthread_create(&thread3, NULL, client_runnable, (double[2]){c, sum});
+    pthread_join(thread1, (void **) &thread1_status);
+    //pthread_join(thread2, (void **) &thread2_status);
+   // pthread_join(thread3, (void **) &thread3_status);
     return 0;
 }
