@@ -87,7 +87,6 @@ void *client_runnable(const double *arg) {
 
 
     if (connect(client_socket, (struct sockaddr *) &address, sizeof(address)) < 0) {
-        printf("\n Error : Connect Failed \n");
         perror("client_socket:connect");
         exit(2);
     }
@@ -98,10 +97,6 @@ void *client_runnable(const double *arg) {
 }
 
 void server_runnable() {
-    //int8_t BUFFER_SIZE = sizeof(double);
-    //double part_of_result;
-    //double* results_buffer = malloc(sizeof(double) * 3);
-
     int server_socket;
     struct sockaddr_in address;
 
@@ -123,17 +118,30 @@ void server_runnable() {
     listen(server_socket, 3);
     printf("\nServer started\n");
 
-    int connectId = accept(server_socket, (struct sockaddr *) NULL, NULL);
-    if (connectId < 0) {
-        perror("accept");
-        exit(3);
+    double* results_buffer = malloc(sizeof(double) * 3);
+
+    int i = 0;
+    while (i < 3) {
+        int connectId = accept(server_socket, (struct sockaddr *) NULL, NULL);
+        if (connectId < 0) {
+            perror("accept");
+            exit(3);
+        }
+
+        double part_of_result = 0;
+        receive_double(&part_of_result, connectId);
+        printf("\nreceived: %f\n", part_of_result);
+        results_buffer[i] = part_of_result;
+        close(connectId);
+        i++;
     }
 
     double result = 0;
-    receive_double(&result, connectId);
-    printf("buf %f", result);
+    for (int j = 0; j < 3; j++) {
+        result += results_buffer[i];
+    }
+    printf("\nResult d: %f", result);
 
-    close(connectId);
     exit(0);
 }
 
@@ -147,22 +155,22 @@ int main(int argc, char *argv[]) {
     scanf("%lf", &b);
     printf("Enter 3 number: ");
     scanf("%lf", &c);
-//    printf("%f %f %f", a, b, c);
     double sum = (a + b + c) / 3;
-    printf("\nSum of numbers / 3: %f", sum);
+    printf("\nSum / 3 = %f", sum);
 
     pthread_t thread1, thread2, thread3, server_thread;
     int thread1_status, thread2_status, thread3_status;
 
     pthread_create(&server_thread, NULL, server_runnable, NULL);
+
     pthread_create(&thread1, NULL, client_runnable, (double[2]) {a, sum});
 
-    //pthread_create(&thread2, NULL, client_runnable, (double[2]){b, sum});
-    //pthread_create(&thread3, NULL, client_runnable, (double[2]){c, sum});
+    pthread_create(&thread2, NULL, client_runnable, (double[2]){b, sum});
+    pthread_create(&thread3, NULL, client_runnable, (double[2]){c, sum});
 
     pthread_join(thread1, (void **) &thread1_status);
-    //pthread_join(thread2, (void **) &thread2_status);
-    //pthread_join(thread3, (void **) &thread3_status);
+    pthread_join(thread2, (void **) &thread2_status);
+    pthread_join(thread3, (void **) &thread3_status);
     pthread_join(server_thread, (void **) &thread3_status);
     return 0;
 }
