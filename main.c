@@ -7,6 +7,7 @@
 #include <pthread.h>
 #include <malloc.h>
 #include <stdlib.h>
+#include <errno.h>
 
 #define PORT 6969
 
@@ -21,38 +22,68 @@ long send_all(int s, char *buf, int len, int flags) {
     return (n == -1 ? -1 : total);
 }
 
-long recive_all(int s, char *buf, int len, int flags) {
-    long total = 0;
-    long n;
-    while (total < len) {
-        n = recv(s, buf + total, len - total, flags);
-        if (n == -1) { break; }
-        total += n;
+char*  to_str(double value) {
+    int length = snprintf(NULL, 0, "%f", value);
+    char* result = malloc(length + 1);
+    snprintf(result, length + 1, "%f", value);
+    return result;
+}
+
+int send_double(double num, int fd){
+    double conv = htole64(num);
+    char *data = (char*)&conv;
+    int left = sizeof(conv);
+    int rc;
+    do {
+        rc = send(fd, data, left,0);
+        if (rc < 0) {
+            if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) {
+                // use select() or epoll() to wait for the socket to be writable again
+            }
+            else if (errno != EINTR) {
+                return -1;
+            }
+        }
+        else {
+            data += rc;
+            left -= rc;
+        }
     }
-    return (n == -1 ? -1 : total);
+    while (left > 0);
+    return 0;
 }
 
-void init_address(struct sockaddr_un *addr, const char *path, int I) {
-    struct sockaddr_un tmp = {.sun_family = AF_UNIX};
-    // fill sun_path
-    memset(tmp.sun_path, I, 108);
-    // copy path
-    snprintf(tmp.sun_path, 108, "%s", path);
-    *addr = tmp;
+int receive_double(double *num, int fd){
+    double ret;
+    char *data = (char*)&ret;
+    int left = sizeof(ret);
+    int rc;
+    do {
+        rc = recv(fd, data, left,0);
+        if (rc <= 0) { /* instead of ret */
+            if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) {
+                // use select() or epoll() to wait for the socket to be readable again
+            }
+            else if (errno != EINTR) {
+                return -1;
+            }
+        }
+        else {
+            data += rc;
+            left -= rc;
+        }
+    }
+    while (left > 0);
+    *num = htole64(ret);
+    return 0;
 }
-
 
 void *client_runnable(const double *arg) {
     struct sockaddr_in address;
-    char message[] = "Hello there!\n";
-    char buf[sizeof(message)];
-    //init_address(&address, "/tmp/test", 'x');
-    //address.sun_family = AF_UNIX;
-
-    double sum = *(arg), value = *(arg + 1);
+    double value = *(arg), sum = *(arg + 1);
     double part = sum - value;
     double result = (part * part) / 2;
-    printf("\nClient result = %f\n", result);
+    printf("\nClient result = %f\nvalue=%f\nsum=%f\n", result, value, sum);
 
     int client_socket = socket(AF_INET, SOCK_STREAM, 0); // todo: use AF_UNIX
     if (client_socket < 0) {
@@ -70,22 +101,20 @@ void *client_runnable(const double *arg) {
         perror("client_socket:connect");
         exit(2);
     }
-    send(client_socket, message, sizeof(message), 0);
+    char* buf = to_str(result);
+    //send(client_socket, buf, strlen(buf), 0);
+    send_double(result, client_socket);
     close(client_socket);
     pthread_exit(NULL);
 }
 
 void server_runnable() {
-    long bytes_read, current = 0;
     //int8_t BUFFER_SIZE = sizeof(double);
     //double part_of_result;
     //double* results_buffer = malloc(sizeof(double) * 3);
 
     int server_socket;
     struct sockaddr_in address;
-    //init_address(&address, "/tmp/test", 'x');
-    //address.sun_family = AF_UNIX;
-    //address.sun_path = '\0';
 
     server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket < 0) {
@@ -111,14 +140,9 @@ void server_runnable() {
         exit(3);
     }
 
-    char buf[1024];
-
-    //char *buf = malloc(sizeof(double)+1);
-    while (1) {
-        bytes_read = recv(connectId, buf, 1024, 0);
-        if (bytes_read <= 0) break;
-    }
-    printf("buf %s", buf);
+    double result = 0;
+    receive_double(&result, connectId);
+    printf("buf %f", result);
 
     close(connectId);
     exit(0);
@@ -136,19 +160,20 @@ int main(int argc, char *argv[]) {
     scanf("%lf", &c);
 //    printf("%f %f %f", a, b, c);
     double sum = (a + b + c) / 3;
-    //printf("\n%f", sum);
+    printf("\nSum of numbers / 3: %f", sum);
 
-    //server_runnable();
-    pthread_t thread1, thread2, thread3;
+    pthread_t thread1, thread2, thread3,  server_thread;
     int thread1_status, thread2_status, thread3_status;
-    pthread_create(&thread2, NULL, server_runnable, NULL);
 
+    pthread_create(&server_thread, NULL, server_runnable, NULL);
     pthread_create(&thread1, NULL, client_runnable, (double[2]) {a, sum});
 
     //pthread_create(&thread2, NULL, client_runnable, (double[2]){b, sum});
     //pthread_create(&thread3, NULL, client_runnable, (double[2]){c, sum});
+
     pthread_join(thread1, (void **) &thread1_status);
     //pthread_join(thread2, (void **) &thread2_status);
-    // pthread_join(thread3, (void **) &thread3_status);
+    //pthread_join(thread3, (void **) &thread3_status);
+    pthread_join(server_thread, (void **) &thread3_status);
     return 0;
 }
