@@ -19,6 +19,132 @@ pthread_cond_t cond;
 int send_double(double num, int fd);
 int receive_double(double *num, int fd);
 
+void *divide_runnable(const double *arg) {
+    double value = *(arg), divider = *(arg + 1);
+    double result = value/divider;
+
+    printf("\ndivide_runnable=%f\n", result);
+
+    struct sockaddr_in address;
+    address.sin_family = AF_INET;
+    address.sin_port = htons(PORT);
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+
+    int client_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (client_socket < 0) {
+        perror("client_socket:socket");
+        exit(1);
+    }
+    if (connect(client_socket, (struct sockaddr *) &address, sizeof(address)) < 0) {
+        perror("client_socket:connect");
+        exit(2);
+    }
+
+    send_double(result, client_socket);
+
+    close(client_socket);
+    pthread_exit(NULL);
+}
+
+void *sum_runnable(const double *arg) {
+    struct sockaddr_in address;
+    int length = sizeof(arg)/sizeof(arg[0]);
+    double result = 0;
+    for(int i =0; i< length; i++) {
+        result+=arg[i];
+    }
+
+    printf("\nsum_runnable=%f\n", result);
+
+    int client_socket = socket(AF_INET, SOCK_STREAM, 0); // todo: use AF_UNIX
+    if (client_socket < 0) {
+        perror("client_socket:socket");
+        exit(1);
+    }
+
+    address.sin_family = AF_INET;
+    address.sin_port = htons(PORT);
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+
+    if (connect(client_socket, (struct sockaddr *) &address, sizeof(address)) < 0) {
+        perror("client_socket:connect");
+        exit(2);
+    }
+
+    // pthread_mutex_lock(&mutex);
+    //pthread_cond_wait(&cond, &mutex);
+
+    send_double(result, client_socket);
+
+    // pthread_mutex_unlock(&mutex);
+    close(client_socket);
+    pthread_exit(NULL);
+}
+
+void *pow_runnable(const double value) {
+    struct sockaddr_in address;
+    double result = value * value;
+
+    printf("\npow_runnable=%f\n", result);
+
+    int client_socket = socket(AF_INET, SOCK_STREAM, 0); // todo: use AF_UNIX
+    if (client_socket < 0) {
+        perror("client_socket:socket");
+        exit(1);
+    }
+
+    address.sin_family = AF_INET;
+    address.sin_port = htons(PORT);
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+
+    if (connect(client_socket, (struct sockaddr *) &address, sizeof(address)) < 0) {
+        perror("client_socket:connect");
+        exit(2);
+    }
+
+    // pthread_mutex_lock(&mutex);
+    //pthread_cond_wait(&cond, &mutex);
+
+    send_double(result, client_socket);
+
+    // pthread_mutex_unlock(&mutex);
+    close(client_socket);
+    pthread_exit(NULL);
+}
+
+void *minus_runnable(const double *arg) {
+    struct sockaddr_in address;
+    double value = *(arg), sum = *(arg + 1);
+    double part = sum - value;
+    double result = (part * part) / 2;
+
+    printf("\nsum_runnable=%f\n", result);
+
+    int client_socket = socket(AF_INET, SOCK_STREAM, 0); // todo: use AF_UNIX
+    if (client_socket < 0) {
+        perror("client_socket:socket");
+        exit(1);
+    }
+
+    address.sin_family = AF_INET;
+    address.sin_port = htons(PORT);
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+
+    if (connect(client_socket, (struct sockaddr *) &address, sizeof(address)) < 0) {
+        perror("client_socket:connect");
+        exit(2);
+    }
+
+    // pthread_mutex_lock(&mutex);
+    //pthread_cond_wait(&cond, &mutex);
+
+    send_double(result, client_socket);
+
+    // pthread_mutex_unlock(&mutex);
+    close(client_socket);
+    pthread_exit(NULL);
+}
+
 void *client_runnable(const double *arg) {
     struct sockaddr_in address;
     double value = *(arg), sum = *(arg + 1);
