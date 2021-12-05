@@ -148,7 +148,7 @@ void *minus_runnable(const double average) {
 
         double value = 0;
         receive_double(&value, client_socket);
-
+        printf("\nminus_value=%f", value);
         double part = value - average;
         double result = (part * part) / 2;
         printf("\nminus_runnable=%f", result);
@@ -165,15 +165,10 @@ void *server_runnable(const double *arg) {
     double sum = 0;
     double average = 0;
     double *results_buffer = malloc(sizeof(double) * 3);
+    double result;
 
     pthread_t thread_sum, thread_pow, thread_minus, thread_divide;
     int thread1_status, thread2_status, thread3_status, thread4_status;
-    /*
-    pthread_create(&thread_sum, NULL, sum_runnable, (double[2]) {a, sum});
-    pthread_create(&thread_pow, NULL, pow_runnable, (double[2]) {b, sum});
-    pthread_create(&thread_minus, NULL, minus_runnable, (double[2]) {c, sum});
-    pthread_create(&thread_divide, NULL, divide_runnable, (double[2]) {c, sum});
-     */
 
     int server_socket;
     struct sockaddr_in address;
@@ -245,29 +240,37 @@ void *server_runnable(const double *arg) {
         close(connectId);
     }
 
+    pthread_create(&thread_sum, NULL, sum_runnable, results_buffer);
+    connectId = accept(server_socket, (struct sockaddr *) NULL, NULL);
+    if (connectId < 0) {
+        perror("accept");
+        exit(3);
+    }
+    pthread_cond_signal(&condSum);
+    receive_double(&sum, connectId);
+    printf("\nreceived sum: %f\n", sum);
+    close(connectId);
+
+    pthread_create(&thread_divide, NULL, divide_runnable, (double[3]) {sum, 2});
+    connectId = accept(server_socket, (struct sockaddr *) NULL, NULL);
+    if (connectId < 0) {
+        perror("accept");
+        exit(3);
+    }
+    pthread_cond_signal(&condDivide);
+    receive_double(&result, connectId);
+    printf("\nreceived result: %f\n", result);
+    close(connectId);
     //pthread_mutex_lock(&mutex);
     //pthread_cond_signal(&condSum);
     //pthread_mutex_unlock(&mutex);
 
-    /*
-    double sum = 0;
-    receive_double(&sum, connectId);
-    printf("\nreceived: %f\n", sum);
-    results_buffer[i] = sum;
-    */
-
-    //TODO: wait finish of all connections
-    double result = 0;
-    for (int j = 0; j < 3; j++) {
-        result += results_buffer[j];
-    }
     printf("\nResult d: %f", result);
 
-    pthread_join(thread_sum, (void **) &thread1_status);
-    //pthread_join(thread_pow, (void **) &thread2_status);
-    //pthread_join(thread_minus, (void **) &thread3_status);
+    //pthread_join(thread_sum, (void **) &thread1_status);
+    pthread_join(thread_pow, (void **) &thread2_status);
+    pthread_join(thread_minus, (void **) &thread3_status);
     //pthread_join(thread_divide, (void **) &thread4_status);
-    // pthread_join(server_thread, (void **) &thread3_status);
     exit(0);
 }
 
