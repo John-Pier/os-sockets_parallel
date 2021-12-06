@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <errno.h>
 
-#define PORT 6995
+#define PORT 6991
 
 pthread_mutex_t mutex;
 pthread_cond_t condSum, condMinus, condDivide, condPow;
@@ -18,74 +18,83 @@ int send_double(double num, int fd);
 
 int receive_double(double *num, int fd);
 
-void *divide_runnable(const double *arg) {
-    double value = *(arg), divider = *(arg + 1);
-    double result = value / divider;
+void *divide_runnable() {
+    printf("\ndivide_runnable start");
+    int i = 0;
+    while (++i < 3) {
+        pthread_mutex_lock(&mutex);
+        pthread_cond_wait(&condDivide, &mutex);
 
-    printf("\ndivide_runnable=%f\n", result);
+        struct sockaddr_in address;
+        address.sin_family = AF_INET;
+        address.sin_port = htons(PORT);
+        address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 
-    struct sockaddr_in address;
-    address.sin_family = AF_INET;
-    address.sin_port = htons(PORT);
-    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        int client_socket = socket(AF_INET, SOCK_STREAM, 0);
+        if (client_socket < 0) {
+            perror("client_socket:socket");
+            exit(1);
+        }
+        if (connect(client_socket, (struct sockaddr *) &address, sizeof(address)) < 0) {
+            perror("client_socket:connect");
+            exit(2);
+        }
 
-    int client_socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (client_socket < 0) {
-        perror("client_socket:socket");
-        exit(1);
+        double value = 0;
+        double divider = 0;
+        receive_double(&value, client_socket);
+        receive_double(&divider, client_socket);
+
+        double result = value / divider;
+        printf("\ndivide_runnable=%f\n", result);
+
+        send_double(result, client_socket);
+
+        close(client_socket);
+        pthread_mutex_unlock(&mutex);
     }
-    if (connect(client_socket, (struct sockaddr *) &address, sizeof(address)) < 0) {
-        perror("client_socket:connect");
-        exit(2);
-    }
-
-    pthread_mutex_lock(&mutex);
-    pthread_cond_wait(&condDivide, &mutex);
-
-    send_double(result, client_socket);
-
-    pthread_mutex_unlock(&mutex);
-
-    close(client_socket);
     pthread_exit(NULL);
 }
 
-void *sum_runnable(const double *arg) {
-    struct sockaddr_in address;
-    double result = 0;
-    for (int i = 0; i < 3; i++) {
-        result += arg[i];
+void *sum_runnable() {
+    printf("\nsum_runnable start");
+    int i = 0;
+    while (++i < 3) {
+        pthread_mutex_lock(&mutex);
+        pthread_cond_wait(&condSum, &mutex);
+
+        struct sockaddr_in address;
+        int client_socket = socket(AF_INET, SOCK_STREAM, 0); // todo: use AF_UNIX
+        if (client_socket < 0) {
+            perror("client_socket:socket");
+            exit(1);
+        }
+        address.sin_family = AF_INET;
+        address.sin_port = htons(PORT);
+        address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        if (connect(client_socket, (struct sockaddr *) &address, sizeof(address)) < 0) {
+            perror("client_socket:connect");
+            exit(2);
+        }
+
+        double result = 0;
+        double value;
+        for (int j = 0; j < 3; j++) {
+            receive_double(&value, client_socket);
+            result += value;
+        }
+        printf("\nsum_runnable=%f\n", result);
+
+        send_double(result, client_socket);
+
+        close(client_socket);
+        pthread_mutex_unlock(&mutex);
     }
-
-    printf("\nsum_runnable=%f\n", result);
-
-    int client_socket = socket(AF_INET, SOCK_STREAM, 0); // todo: use AF_UNIX
-    if (client_socket < 0) {
-        perror("client_socket:socket");
-        exit(1);
-    }
-
-    address.sin_family = AF_INET;
-    address.sin_port = htons(PORT);
-    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-
-    if (connect(client_socket, (struct sockaddr *) &address, sizeof(address)) < 0) {
-        perror("client_socket:connect");
-        exit(2);
-    }
-
-    pthread_mutex_lock(&mutex);
-    pthread_cond_wait(&condSum, &mutex);
-
-    send_double(result, client_socket);
-
-    pthread_mutex_unlock(&mutex);
-
-    close(client_socket);
     pthread_exit(NULL);
 }
 
 void *pow_runnable() {
+    printf("\npow_runnable start");
     int i = 0;
     while (++i < 4) {
         pthread_mutex_lock(&mutex);
@@ -121,6 +130,7 @@ void *pow_runnable() {
 }
 
 void *minus_runnable(const double average) {
+    printf("\nminus_runnable start");
     int i = 0;
     while (++i <= 3) {
         pthread_mutex_lock(&mutex);
@@ -128,14 +138,11 @@ void *minus_runnable(const double average) {
 
         struct sockaddr_in address;
         int connectId;
-
-
         int client_socket = socket(AF_INET, SOCK_STREAM, 0); // todo: use AF_UNIX
         if (client_socket < 0) {
             perror("client_socket:socket");
             exit(1);
         }
-
         address.sin_family = AF_INET;
         address.sin_port = htons(PORT);
         address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
@@ -161,7 +168,7 @@ void *minus_runnable(const double average) {
 }
 
 void *server_runnable(const double *arg) {
-    double a = *(arg), b = *(arg + 1), c = *(arg + 2);
+    //double a = *(arg), b = *(arg + 1), c = *(arg + 2);
     double sum = 0;
     double average = 0;
     double *results_buffer = malloc(sizeof(double) * 3);
@@ -191,25 +198,27 @@ void *server_runnable(const double *arg) {
     listen(server_socket, 3);
     printf("\nServer started\n");
 
-    pthread_create(&thread_sum, NULL, sum_runnable, (double[3]) {a, b, c});
+    pthread_create(&thread_sum, NULL, sum_runnable, NULL);
+    pthread_cond_signal(&condSum);
     int connectId = accept(server_socket, (struct sockaddr *) NULL, NULL);
     if (connectId < 0) {
         perror("accept");
         exit(3);
     }
-    pthread_cond_signal(&condSum);
+    for (int i = 0; i < 3; i++) {
+        send_double(arg[i], connectId);
+    }
     receive_double(&sum, connectId);
     printf("\nreceived sum: %f\n", sum);
     close(connectId);
 
-
-    pthread_create(&thread_divide, NULL, divide_runnable, (double[3]) {sum, 3});
+    pthread_cond_signal(&condDivide);
+    pthread_create(&thread_divide, NULL, divide_runnable, NULL);
     connectId = accept(server_socket, (struct sockaddr *) NULL, NULL);
     if (connectId < 0) {
         perror("accept");
         exit(3);
     }
-    pthread_cond_signal(&condDivide);
     receive_double(&average, connectId);
     printf("\nreceived average: %f\n", average);
     close(connectId);
@@ -240,27 +249,31 @@ void *server_runnable(const double *arg) {
         close(connectId);
     }
 
-    pthread_create(&thread_sum, NULL, sum_runnable, results_buffer);
+    pthread_cond_signal(&condSum);
     connectId = accept(server_socket, (struct sockaddr *) NULL, NULL);
     if (connectId < 0) {
         perror("accept");
         exit(3);
     }
-    pthread_cond_signal(&condSum);
+    for (int i = 0; i < 3; i++) {
+        send_double(results_buffer[i], connectId);
+    }
     receive_double(&sum, connectId);
     printf("\nreceived sum: %f\n", sum);
     close(connectId);
 
-    pthread_create(&thread_divide, NULL, divide_runnable, (double[3]) {sum, 2});
+    pthread_cond_signal(&condDivide);
     connectId = accept(server_socket, (struct sockaddr *) NULL, NULL);
     if (connectId < 0) {
         perror("accept");
         exit(3);
     }
-    pthread_cond_signal(&condDivide);
+    send_double(sum, connectId);
+    send_double(2, connectId);
     receive_double(&result, connectId);
     printf("\nreceived result: %f\n", result);
     close(connectId);
+
     //pthread_mutex_lock(&mutex);
     //pthread_cond_signal(&condSum);
     //pthread_mutex_unlock(&mutex);
