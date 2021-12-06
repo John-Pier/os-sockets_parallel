@@ -13,7 +13,7 @@
 
 pthread_mutex_t mutex;
 pthread_mutex_t main_mutex;
-pthread_cond_t condSum, condMinus, condDivide, condPow, condMain;
+pthread_cond_t condSum, condMinus, condDivide, condPow;
 pthread_t thread_sum, thread_pow, thread_minus, thread_divide;
 
 int send_double(double num, int fd);
@@ -212,7 +212,7 @@ void *server_runnable(const double *arg) {
         send_double(arg[i], connectId);
     }
     receive_double(&sum, connectId);
-    printf("\nreceived sum: %f\n", sum);
+    printf("\nSum: received: %f\n", sum);
     close(connectId);
 
     pthread_cond_signal(&condDivide);
@@ -224,7 +224,7 @@ void *server_runnable(const double *arg) {
     send_double(sum, connectId);
     send_double(3, connectId);
     receive_double(&average, connectId);
-    printf("\nreceived average: %f\n", average);
+    printf("\nDiv: received: %f\n", average);
     close(connectId);
 
     for (int i = 0; i < 3; i ++) {
@@ -237,7 +237,7 @@ void *server_runnable(const double *arg) {
         send_double(arg[i], connectId);
         send_double(average, connectId);
         receive_double(&results_buffer[i], connectId);
-        printf("\nreceived: %f", results_buffer[i]);
+        printf("\nMinus: received: %f\n", results_buffer[i]);
         close(connectId);
 
         pthread_cond_signal(&condPow);
@@ -248,7 +248,7 @@ void *server_runnable(const double *arg) {
         }
         send_double(results_buffer[i], connectId);
         receive_double(&results_buffer[i], connectId);
-        printf("\nreceived: %f\n", results_buffer[i]);
+        printf("\nPow: received: %f\n", results_buffer[i]);
         close(connectId);
     }
 
@@ -262,7 +262,7 @@ void *server_runnable(const double *arg) {
         send_double(results_buffer[i], connectId);
     }
     receive_double(&sum, connectId);
-    printf("\nreceived sum: %f\n", sum);
+    printf("\nSum: received: %f\n", sum);
     close(connectId);
 
     pthread_cond_signal(&condDivide);
@@ -274,16 +274,10 @@ void *server_runnable(const double *arg) {
     send_double(sum, connectId);
     send_double(2, connectId);
     receive_double(&result, connectId);
-    printf("\nreceived result: %f\n", result);
+    printf("\nDiv: received: %f\n", result);
     close(connectId);
 
-    //pthread_mutex_unlock(&main_mutex);
-
-    //pthread_mutex_lock(&mutex);
-    //pthread_cond_signal(&condSum);
-    //pthread_mutex_unlock(&mutex);
-
-    printf("\nResult d: %f", result);
+    printf("\n-----\nResult: %f", result);
     pthread_exit(NULL);
 }
 
@@ -305,7 +299,6 @@ int main(int argc, char *argv[]) {
     pthread_cond_init(&condDivide, NULL);
     pthread_cond_init(&condPow, NULL);
     pthread_cond_init(&condMinus, NULL);
-    pthread_cond_init(&condMain, NULL);
 
     pthread_create(&thread_sum, NULL, sum_runnable, NULL);
     pthread_create(&thread_divide, NULL, divide_runnable, NULL);
@@ -319,12 +312,16 @@ int main(int argc, char *argv[]) {
     int status;
     int thread1_status, thread2_status, thread3_status, thread4_status;
     pthread_join(server_thread, (void **) &status);
-    pthread_join(thread_sum, (void **) &thread1_status);
-    pthread_join(thread_pow, (void **) &thread2_status);
-    pthread_join(thread_minus, (void **) &thread3_status);
-    pthread_join(thread_divide, (void **) &thread4_status);
-    pthread_cond_destroy(&condSum);
+    pthread_detach(thread_sum);
+    pthread_detach(thread_pow);
+    pthread_detach(thread_minus);
+    pthread_detach(thread_divide);
+    //pthread_join(thread_sum, (void **) &thread1_status);
+    //pthread_join(thread_pow, (void **) &thread2_status);
+    //pthread_join(thread_minus, (void **) &thread3_status);
+    //pthread_join(thread_divide, (void **) &thread4_status);
     pthread_cond_destroy(&condDivide);
+    pthread_cond_destroy(&condSum);
     pthread_cond_destroy(&condPow);
     pthread_cond_destroy(&condMinus);
     return 0;
